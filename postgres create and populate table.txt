@@ -1,0 +1,27 @@
+CREATE TABLE books_old
+(
+	id serial NOT NULL,
+	"Month" text,
+	"DATE_ADDED" date,
+	"Geographic identifier" text,
+	"Pleiades, TGN, or FAST ID" text,
+	"TAG651_A" text,
+	"icons" text,
+	"Precision code" text,
+	"Precision" text,
+	"Region" text,
+	"Location" text,
+	"Controlled heading (Pleiades, TGN, LCSH, or FAST)" text,
+	"Coordinates" text,
+	"Title and author" text,
+	"Imprint" text,
+	"Series" text,
+	"Library location" text,
+	"BSN" text,
+	"BSN length adjustment" text,
+	"View in library catalog" text,
+	CONSTRAINT books_pkey PRIMARY KEY (id)
+);
+COPY books_old("Month", "DATE_ADDED", "Geographic identifier", "Pleiades, TGN, or FAST ID", "TAG651_A", "icons", "Precision code", "Precision", "Region", "Location", "Controlled heading (Pleiades, TGN, LCSH, or FAST)", "Coordinates", "Title and author", "Imprint", "Series", "Library location", "BSN", "BSN length adjustment", "View in library catalog") FROM '/Users/christiancasey/Dropbox/Postdoc/Code/nt/new_titles_data_old.csv' DELIMITER ',' CSV HEADER;
+
+
