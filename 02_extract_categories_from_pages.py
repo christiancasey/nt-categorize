@@ -4,17 +4,15 @@
 Created on Thu Oct 31 10:23:56 2019
 
 @author: christiancasey
-"""
 
+This script processes the scraped data from the ISAW New Titles pages
+and creates a new set of files with only book entries grouped by category.
+"""
 
 import os
 import glob
 import re
 import pandas
-
-
-def FindAllSubstringMatches(strHaystack, strNeedle):
-	return [i for i in range(len(strHaystack)) if strHaystack.startswith(strNeedle, i)]
 
 #%% Load categories data files
 
@@ -128,17 +126,11 @@ for strFilename in vFiles:
 		
 	# Loop through categories in file and extract content
 	vMatches = re.finditer('•Category¶\d',strPage)
-	iMatch = 0
-	for reMatch in vMatches:
+	for iMatch, reMatch in enumerate(vMatches):
 		iCatID = int(reMatch.group()[-1])
 		strBooksInCat = strPage[vMatchStart[iMatch]:vMatchStart[iMatch+1]]
 		strBooksInCat = '%s\n\n%s\n\n\n\n%s\n' % (strFilename,strBooksInCat, '~'*80) 					# Add some whitespace
 		vBooksInCat[iCatID-1] = vBooksInCat[iCatID-1] + strBooksInCat
-		iMatch += 1
-	
-#	with open(strFilename, 'w') as f:
-#		f.write(strPage)
-#		f.close()
 	
 #%% Save books in category to text files
 for iCatID in range(1,nCategories+1):

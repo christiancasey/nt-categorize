@@ -4,7 +4,10 @@
 Created on Thu Oct 31 10:23:56 2019
 
 @author: christiancasey
+
+This script downloads all of the pages in the ISAW New Titles part of the website.
 """
+
 import urllib
 import os
 import glob
