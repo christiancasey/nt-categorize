@@ -5,7 +5,8 @@ Created on Fri Nov  1 15:24:52 2019
 
 @author: christiancasey
 
-This script imports the 
+This script matches the titles in the Google Sheet (prepared by Gabriel) 
+to the results from scraping the webpage
 """
 
 import os
@@ -34,6 +35,12 @@ def FindMatchesInColumn( dfColumn, strWord ):
 	vMatches = [ int(x) for x in vMatches ]
 	return vMatches
 
+def PadBSN( strBSN ):
+	if len(strBSN) >= 9:
+		return strBSN
+	strBSN = '0'*(9-len(strBSN)) + strBSN
+	return strBSN
+
 #%% Load categories data files
 
 # Basic categories (index corresponds to category number - 1)
@@ -43,17 +50,18 @@ with open('categories.dat', 'r') as f:
 nCategories = len(vCategories)
 
 #%% Initialize dataframes
-
-
-nWords = 20
-
 dfBooks = pandas.read_pickle('books_categories.pkl')
+dfBooks.insert(0, 'Index', dfBooks.index.tolist() ) 			# Add an index to include in match below
 
 # Get the current data from the CSV file that Gabriel is editing
 dfSheet = pandas.read_csv('https://docs.google.com/spreadsheets/d/e/2PACX-1vQJKa50tuO654jw8quDaMRlKJbDIkV3FYQPESrQ60IfspMZQynqs1tEA99x6lNm_L9t8fikw8LdAwY4/pub?gid=1471928200&single=true&output=csv')
+
 # Rename one column because it causes problems for SQL
 dfSheet.rename( columns = {'Controlled heading (Pleiades, TGN, LCSH, or FAST)': 'Controlled heading'}, inplace = True)
 
+# Cludge to fix the fact that this formatted date field is interpreted as a float on import
+dfSheet['DATE_ADDED'] = dfSheet['DATE_ADDED'].astype(str)
+dfSheet['DATE_ADDED'] = dfSheet['DATE_ADDED'].apply(lambda x: x.replace('.0', ''))
 
 nBooks = len(dfBooks)
 nSheet = len(dfSheet)
@@ -62,7 +70,7 @@ nSheet = len(dfSheet)
 vSheetTitles = dfBooks['BookAlpha'].str.lower().to_list()
 vSheetTitles = [ re.sub( r'[^\w]', '', s ) for s in vSheetTitles ]
 
-#%%
+#%% Matching -- match Google Sheets data (dfSheets) to list of books scraped from site (dfBooks)
 
 dfBooksMatches = pandas.DataFrame(columns = ['MatchedTitle', 'MatchIndex', 'Category', 'CategoryID', 'Score'])
 
@@ -70,82 +78,79 @@ dfBooksMatches = pandas.DataFrame(columns = ['MatchedTitle', 'MatchIndex', 'Cate
 # Loop through each title in the books dataframe and find its best match in the sheet
 
 for iRow in tqdm(range(0, nSheet)):
+	
 #	strTitle = dfBooks['BookAlpha'].iloc[iRow].lower().strip()
 	strTitle = dfSheet['Title and author'].iloc[iRow].lower().strip()
 #	iAuthorStart = strTitle.find(' // ')
 #	if(iAuthorStart > 1):
 #		strTitle = strTitle[:iAuthorStart-1].strip()
 	strTitle = re.sub( r'[^\w]', '', strTitle )
-#	strTitle = re.sub( r' \w{1,5} ', ' ', strTitle )
 	
-	# Compare the title in the book entry to the titles column in the sheet 
-	# and find the best match
-#	vSumRow = [0]*nSheet
-	vSumRow = [0]*nBooks
-	for iSheet, strSheetTitle in (enumerate(vSheetTitles)):
-		iMaxLen = min( len(strTitle), len(strSheetTitle) )
-		vSumRow[iSheet] = iMaxLen
-		for i in range(1,iMaxLen):
-			if not strTitle[:i] == strSheetTitle[:i]:
-				vSumRow[iSheet] = i
-				break
+	strBSN = PadBSN( dfSheet['BSN'].iloc[iRow] )
+	dfBSNMatch = dfBooks.query('BSN == "'  + strBSN + '"')
+	
+	# If there is a BSN match, make the connection and skip the title matching
+	if len(dfBSNMatch) == 1:
+		
+		strTitle = dfBSNMatch['BookAlpha'].iloc[0]
+		iMaxIndex = dfBSNMatch['Index'].iloc[0]
+		iCatID = dfBSNMatch['CategoryID'].iloc[0]
+		iMaxScore = 1000          #  Just make it bigger than anything in the title matches
+		dfBooksMatchesRow = pandas.DataFrame( {'MatchedTitle': [ dfBSNMatch['BookAlpha'] ],
+																																										'MatchIndex': [ iMaxIndex ],
+																																										'Category': [ vCategories[iCatID-1] ],
+																																										'CategoryID': [ iCatID ],
+																																										'Score': [ iMaxScore ]} )
+		dfBooksMatches = dfBooksMatches.append(dfBooksMatchesRow, ignore_index=True)
+	
+	else:
+		# Compare the title in the book entry to the titles column in the sheet 
+		# and find the best match
+	#	vSumRow = [0]*nSheet
+		vSumRow = [0]*nBooks
+		for iSheet, strSheetTitle in (enumerate(vSheetTitles)):
+			iMaxLen = min( len(strTitle), len(strSheetTitle) )
+			vSumRow[iSheet] = iMaxLen
+			for i in range(1,iMaxLen):
+				if not strTitle[:i] == strSheetTitle[:i]:
+					vSumRow[iSheet] = i
+					break
 		
 		
+		iMaxScore = max(vSumRow)
+		vMaxIndices = [i for i, iValue in enumerate(vSumRow) if iValue == iMaxScore]
+		iMaxIndex = vMaxIndices[0]
+	#	print(vMaxIndices)
+		iCatID = dfBooks['CategoryID'].iloc[iMaxIndex]
 		
-#		vMatches = FindMatchesInColumn( dfSheet['Title and author'], strWord )
-#		vSumRow = [ x + y for x, y in zip(vSumRow, vMatches) ]
-	
-	
-	iMaxScore = max(vSumRow)
-	vMaxIndices = [i for i, iValue in enumerate(vSumRow) if iValue == iMaxScore]
-	iMaxIndex = vMaxIndices[0]
-#	print(vMaxIndices)
-	iCatID = dfBooks['CategoryID'].iloc[iMaxIndex]
-	
-	dfBooksMatchesRow = pandas.DataFrame( {'MatchedTitle': [ dfBooks['BookAlpha'].iloc[iMaxIndex] ],
-																																									'MatchIndex': [ iMaxIndex ],
-																																									'Category': [ vCategories[iCatID-1] ],
-																																									'CategoryID': [ iCatID ],
-																																									'Score': [ iMaxScore ]} )
-	dfBooksMatches = dfBooksMatches.append(dfBooksMatchesRow, ignore_index=True)
+		# Use score 10 as threshold for adding
+		if iMaxScore >= 10:
+			dfBooksMatchesRow = pandas.DataFrame( {'MatchedTitle': [ dfBooks['BookAlpha'].iloc[iMaxIndex] ],
+																																											'MatchIndex': [ iMaxIndex ],
+																																											'Category': [ vCategories[iCatID-1] ],
+																																											'CategoryID': [ iCatID ],
+																																											'Score': [ iMaxScore ]} )
+		else:
+			dfBooksMatchesRow = pandas.DataFrame( {'MatchedTitle': [ '' ],
+																																											'MatchIndex': [ -1 ],
+																																											'Category': [ '' ],
+																																											'CategoryID': [ -1 ],
+																																											'Score': [ iMaxScore ]} )
+		dfBooksMatches = dfBooksMatches.append(dfBooksMatchesRow, ignore_index=True)
+		
 																																								
 
-#	print('\n\n%s\n%s\n' % ('~'*40, strTitle))
-#	for i in vMaxIndices:
-#		print('|||||')
-#		print( vSheetTitles[i] )
-#		print()
-#	print()
-#	print(iMax)
-#	vSum.sort(reverse = True)
-
-##%% Join the new link dataframe with the old
+#%% Join the new link dataframe with the old
 
 dfSheetToBooks = dfSheet.join(dfBooksMatches)
 
-#%%
+#%% Count number of matches
 
-df = dfSheetToBooks.query('`Score` > 10')#.query( '`CategoryID` == 2' )
+df = dfSheetToBooks.query('`Score` >= 10')
 
-df2 = dfSheet['Coordinates'].str.split(',', expand=True)
+print( 'Percent matched entries: %0.2f%%' % (len(df)/len(dfSheetToBooks)*100) )
+print( 'Unmatched entries: %i' % (len(dfSheetToBooks) - len(df)) )
 
-df[['Latitude', 'Longitude']] = df['Coordinates'].str.split(',', expand=True)
-df['Latitude'] = df['Latitude'].str.strip()
-df['Longitude'] = df['Longitude'].str.strip()
-#df[['First','Last']] = df.Name.str.split(expand=True) 
+#%% Save the new matched dataframe
 
-
-df2 = df[['Latitude', 'Longitude', 'CategoryID']]
-df2.to_csv('EarthTest.csv')
-#v=dfSheetToBooks['Score'].to_list()
-#w = [ int(x>10) for x in v ]
-#sum(w)
-
-#%%
-print(vSumRow[2222])
-
-
-vSheetTitles[1734]
-
-
-print( vSheetTitles[90] )
+dfSheetToBooks.to_pickle('books_categories_messy.pkl')

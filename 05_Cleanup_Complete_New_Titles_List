@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Nov  5 12:53:34 2019
+
+@author: christiancasey
+"""
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Nov  1 15:24:52 2019
+
+@author: christiancasey
+
+This script takes the complete book list and cleans it up.
+"""
+
+import os
+import glob
+import re
+import pandas
+from tqdm import tqdm
+
+#%% Function definitions
+
+def PadBSN( strBSN ):
+	if len(strBSN) >= 9:
+		return strBSN
+	strBSN = '0'*(9-len(strBSN)) + strBSN
+	return strBSN
+
+#%% Load categories data files
+
+# Basic categories (index corresponds to category number - 1)
+with open('categories.dat', 'r') as f:
+	vCategories = f.read().split('\n')
+	f.close()
+nCategories = len(vCategories)
+
+#%% Initialize dataframes
+df = pandas.read_pickle('books_categories_messy.pkl')
+
+##%% Split the Coordinates into two columns: Latitude & Longitude
+df[['Latitude', 'Longitude']] = df['Coordinates'].str.split(',', expand=True).astype('float')
+
+
+#%% Try to make a simple scikit-learn classifier to fill in missing data
+
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.neighbors import KNeighborsClassifier
+
+# Prepare data for classifier
+dfTrain = df.query('CategoryID > 0')
+X = dfTrain[['Latitude', 'Longitude']].to_numpy()
+y = dfTrain['CategoryID'].to_numpy().astype('int')
+
+dfTest = df.query('CategoryID < 0')
+X_unk = dfTest[['Latitude', 'Longitude']].to_numpy()
+
+# Create, train, and run classifier
+clf = KNeighborsClassifier(6) 			# this seems to be a goodly number of NNs
+
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.1)
+
+clf.fit(X_train, y_train)
+fScore = clf.score(X_test, y_test)
+
+#%% Show accuracy and predict results
+print('Accuracy: %0.2f%%' % (fScore*100))
+y_unk = clf.predict(X_unk).tolist()
+	
+#%% Update missing categories with predictions
+# Raises a deprecation warning. Pandas has deprecated this method without offering a viable alternative.
+iNoCat = (df['CategoryID'] < 0)
+df.ix[iNoCat, 'CategoryID'] = y_unk
+df.ix[iNoCat, 'Category'] = [ vCategories[x-1] for x in y_unk ]
+
+#%% Save the resulting dataframe
+df.to_pickle('books_categories.pkl')
+
+#%% Export data to CSV to check accuracy of classifier
+dfExport = df[ ['Latitude', 'Longitude', 'CategoryID' ] ]
+dfExport.insert(3,'Predicted', [ int(x) for x in iNoCat ] )
+dfExport.to_csv( 'EarthTest2.csv', index=True )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

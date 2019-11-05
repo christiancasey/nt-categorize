@@ -27,7 +27,7 @@ nCategories = len(vCategories)
 
 #%% Extract book entries with categories
 
-dfBooks = pandas.DataFrame(columns = ['CategoryID', 'BookHTML', 'BookAlpha'])
+dfBooks = pandas.DataFrame(columns = ['CategoryID', 'BookHTML', 'BookAlpha', 'BSN'])
 for iCatID in tqdm(range(1,nCategories+1)):
 	
 	strFilename = 'books_in_categories/%i – %s.txt' % (iCatID, vCategories[iCatID-1])
@@ -68,10 +68,25 @@ for iCatID in tqdm(range(1,nCategories+1)):
 		
 		# Now we know that strBibEntry contains a NEW book title
 		
+		# If it has a link, extract the BSN from the URL
+		strBSN = re.findall( r'<a href=.*?nyu_aleph(\d+).*?>', strBibEntry )
+		if len(strBSN) > 0:
+			if isinstance(strBSN, list):
+				strBSN = strBSN[0]
+			elif isinstance(strBSN, str):
+				strBSN = strBSN 	# Don't do anything, just make sure this is accounted for
+			else:
+				strBSN = ''
+		else:
+			strBSN = ''
+		
+		
+		
 		# Put the whole thing in the dataframe
 		dfBook = pandas.DataFrame({'CategoryID': [iCatID],
 																														'BookHTML': [strBibEntry], 
-																														'BookAlpha': [strBibEntryAlpha]})
+																														'BookAlpha': [strBibEntryAlpha],
+																														'BSN':  [strBSN] })
 		
 		dfBooks = dfBooks.append(dfBook, ignore_index=True)
 
